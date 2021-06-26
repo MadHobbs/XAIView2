@@ -5,14 +5,15 @@ import matplotlib as mpl
 import numpy as np
 import os
 from PIL import Image
+from skimage import color
 import cv2
 
 # set global variables
 TEST_PATH = 'test/images'
 LOC_PRED_PATH = 'xView2_first_place/pred34_loc'
-LOC_SAL_PATH = 'xView2_first_place/res34_loc_0_1_best_saliency'
+LOC_SAL_PATH = 'saliency_maps/res34_loc_0_1_best_saliency'
 DMG_PRED_PATH = 'xView2_first_place/res34cls2_0_tuned'
-DMG_SAL_PATH = 'xView2_first_place/res34_cls2_0_tuned_best_saliency'
+DMG_SAL_PATH = 'saliency_maps/res34_cls2_0_tuned_best_saliency'
 
 # helpers
 def load_and_convert(fpath):
@@ -24,29 +25,43 @@ def overlay(background, foreground, alpha=0.5):
 
 def display(show_mask, show_saliency, raw, mask, sal):
     if show_mask:
-        raw_n_mask= overlay(raw, mask)
         if show_saliency:
-            to_display = overlay(raw_n_mask, sal)
+            to_display = overlay(mask, sal)
         else: 
-            to_display = raw_n_mask
+            to_display = mask
     elif show_saliency: 
         to_display = overlay(raw, sal)
     else:
         to_display = raw
     st.image(to_display)
+# def display(show_mask, show_saliency, raw, mask, sal):
+#     if show_mask:
+#         raw_n_mask= overlay(raw, mask)
+#         if show_saliency:
+#             to_display = overlay(raw_n_mask, sal)
+#         else: 
+#             to_display = raw_n_mask
+#     elif show_saliency: 
+#         to_display = overlay(raw, sal)
+#     else:
+#         to_display = raw
+#     st.image(to_display)
+
+def get_loc_mask(selected_scene):
+    pre_image = cv2.imread(f"{TEST_PATH}/{selected_scene}_pre_disaster.png", cv2.IMREAD_UNCHANGED)
+    pred = cv2.imread(f"{LOC_PRED_PATH}/{selected_scene}_pre_disaster_part1.png.png", cv2.IMREAD_UNCHANGED)
+    loc = color.label2rgb(pred, pre_image, colors=['black', 'green'], bg_color='black')
+    return loc
 
 def get_dmg_mask(selected_scene):
     pre_path = f"{DMG_PRED_PATH}/{selected_scene}_pre_disaster_part1.png.png"
     msk1 = cv2.imread(pre_path, cv2.IMREAD_UNCHANGED)
     msk2 = cv2.imread(pre_path.replace('_part1', '_part2'), cv2.IMREAD_UNCHANGED)
+    post_image = cv2.imread(f"{TEST_PATH}/{selected_scene}_post_disaster.png", cv2.IMREAD_UNCHANGED)
     msk = np.concatenate([msk1, msk2[..., 1:]], axis=2)
-    im = Image.fromarray(np.asarray(np.argmax(msk, axis=2), dtype=np.uint8))
-    return im.convert('RGBA')
-    #cmap = mpl.colors.ListedColormap(['black', 'green', 'yellow', 'orange', 'red'])
-    #plt.imshow(np.argmax(msk, axis=2), cmap=cmap)
-    #plt.savefig('out.png', bbox_inches='tight', pad_inches=0, dpi=1024)
-    #return load_and_convert('out.png')
-
+    pred=np.asarray(np.argmax(msk, axis=2), dtype=np.uint8)
+    dmg = color.label2rgb(pred, post_image, colors=['black', 'green', 'yellow', 'orange', 'red'], bg_color='black')
+    return dmg
 
 #####################
 ### STREAMLIT APP ###
@@ -76,11 +91,12 @@ with col1:
     st.header('Pre-Disaster')
     # make buttons
     add_bldg_mask = st.checkbox("Show Building Prediction")
+    #add_bldg_truth = st.checkbox("Show Damage Truth")
     add_bsal_map = st.checkbox("Show Building Saliency Map")
     # gather images
     pre = load_and_convert(f"{TEST_PATH}/{selected_scene}_pre_disaster.png")
-    loc = load_and_convert(f"{LOC_PRED_PATH}/{selected_scene}_pre_disaster_part1.png.png")
-    bsal = load_and_convert(f"{LOC_SAL_PATH}/{selected_scene}_pre_disaster_loc_saliency_k10.png")
+    loc = get_loc_mask(selected_scene)
+    bsal = load_and_convert(f"{LOC_SAL_PATH}/{selected_scene}_pre_disaster_loc_saliency_0.5.png")
     # show name of scene
     st.markdown("### "+selected_scene)
     # react to buttons and disply
@@ -90,15 +106,20 @@ with col2:
     st.header('Post-Disaster')
     # make buttons
     add_dmg_mask = st.checkbox("Show Damage Prediction")
+    #add_dmg_truth = st.checkbox("Show Damage Truth")
     add_dsal_map = st.checkbox("Show Damage Saliency Map")
     # gather images
     post = load_and_convert(f"{TEST_PATH}/{selected_scene}_post_disaster.png")
     dmg = get_dmg_mask(selected_scene) #load_and_convert(f"{DMG_PRED_PATH}/{selected_scene}_pre_disaster_part1.png.png")
-    dsal = load_and_convert(f"{DMG_SAL_PATH}/{selected_scene}_pre_disaster_dmg_saliency_k10.png")
+    dsal_no_building = load_and_convert(f"{DMG_SAL_PATH}/{selected_scene}_pre_disaster_dmg_no-building_saliency_0.5.png")
+    dsal_no_damage = load_and_convert(f"{DMG_SAL_PATH}/{selected_scene}_pre_disaster_dmg_no-damage_saliency_0.5.png")
+    dsal_minor_damage = load_and_convert(f"{DMG_SAL_PATH}/{selected_scene}_pre_disaster_dmg_minor-damage_saliency_0.5.png")
+    dsal_major_damage = load_and_convert(f"{DMG_SAL_PATH}/{selected_scene}_pre_disaster_dmg_major-damage_saliency_0.5.png")
+    dsal_destroyed = load_and_convert(f"{DMG_SAL_PATH}/{selected_scene}_pre_disaster_dmg_destroyed_saliency_0.5.png")
     # show name of scene
     st.markdown("### "+selected_scene)
     # react to buttons and display
     display(show_mask = add_dmg_mask, show_saliency = add_dsal_map, 
-            raw=post, mask=dmg, sal=dsal)
+            raw=post, mask=dmg, sal=dsal_no_building)
     
 
